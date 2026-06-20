@@ -1,0 +1,803 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Miradas Fabulosas</title>
+  <script type="importmap">
+    {
+      "imports": {
+        "react": "https://esm.sh/react@18",
+        "react-dom/client": "https://esm.sh/react-dom@18/client",
+        "firebase/app": "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js",
+        "firebase/firestore": "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js"
+      }
+    }
+  </script>
+  <style>
+    *{box-sizing:border-box;margin:0;padding:0;}
+    body{font-family:'Segoe UI',sans-serif;background:#fdf6f6;}
+    .nav{position:fixed;bottom:0;left:50%;transform:translateX(-50%);width:100%;max-width:480px;background:#fff;border-top:1px solid #f0dede;display:flex;z-index:200;}
+    .nav button{flex:1;padding:10px 0 8px;border:none;background:none;cursor:pointer;font-size:10px;color:#aaa;display:flex;flex-direction:column;align-items:center;gap:2px;}
+    .nav button.active{color:#c9878a;}
+    .nav button .ic{font-size:20px;}
+    input,select,textarea,button{font-family:'Segoe UI',sans-serif;}
+    .bar{height:12px;border-radius:6px;background:#f0dede;overflow:hidden;margin-top:4px;}
+    .bar-fill{height:100%;border-radius:6px;transition:width 0.4s;}
+  </style>
+</head>
+<body>
+<div id="root"></div>
+<script type="module">
+import React,{useState,useEffect} from "react";
+import {createRoot} from "react-dom/client";
+import {initializeApp} from "firebase/app";
+import {getFirestore,collection,doc,setDoc,onSnapshot,deleteDoc,updateDoc} from "firebase/firestore";
+
+const FB={apiKey:"AIzaSyBbZvr2t9Bh7ekJCM2OP8O64Cgy6KWYDaY",authDomain:"miradas-fabulosas.firebaseapp.com",projectId:"miradas-fabulosas",storageBucket:"miradas-fabulosas.firebasestorage.app",messagingSenderId:"339425359104",appId:"1:339425359104:web:a0e342f5a87c3169512fe5"};
+const db=getFirestore(initializeApp(FB));
+
+const ESTS=["Dira","Cristina","Katherine","Gabriela","Astrid","Esly","Disponible 7"];
+const COLORS={"Dira":"#c9878a","Cristina":"#7bafd4","Katherine":"#6dbf8a","Gabriela":"#d4a44c","Astrid":"#9b7fc4","Esly":"#d47b9a","Disponible 7":"#7bc4b8"};
+const USERS_DEF={"Dira":{pin:"1234",rol:"admin"},"Cristina":{pin:"2222",rol:"estilista"},"Katherine":{pin:"3333",rol:"estilista"},"Gabriela":{pin:"4444",rol:"estilista"},"Astrid":{pin:"5555",rol:"estilista"},"Esly":{pin:"6666",rol:"estilista"},"Disponible 7":{pin:"7777",rol:"estilista"}};
+const SVCS_DEF=[
+  {id:"s1",nombre:"Corte",precio:150},{id:"s2",nombre:"Tinte",precio:300},{id:"s3",nombre:"Mechas",precio:400},
+  {id:"s4",nombre:"Tratamiento",precio:200},{id:"s5",nombre:"Peinado",precio:150},{id:"s6",nombre:"Microblading",precio:800},
+  {id:"s7",nombre:"Powderbrow",precio:800},{id:"s8",nombre:"Hairstrokes",precio:700},{id:"s9",nombre:"Extensiones",precio:600},
+  {id:"s10",nombre:"Unas",precio:150},{id:"s11",nombre:"Depilacion",precio:100},{id:"s12",nombre:"Facial",precio:250},
+  {id:"s13",nombre:"Hilo",precio:50},{id:"s14",nombre:"Pestanas",precio:200},{id:"s15",nombre:"Otro",precio:0}
+];
+const HORAS=["07:00","07:30","08:00","08:30","09:00","09:30","10:00","10:30","11:00","11:30","12:00","12:30","13:00","13:30","14:00","14:30","15:00","15:30","16:00","16:30","17:00","17:30","18:00","18:30","19:00"];
+const PAGOS=["Efectivo","Transferencia","Tarjeta","Pendiente"];
+const TARJETAS_DEF=[
+  {id:"cejas",nombre:"Tarjeta Cejas",premio:"Depilacion gratis",visitas:8,color:"#c9878a",svcs:["Microblading","Powderbrow","Hairstrokes","Depilacion","Hilo","Facial"]},
+  {id:"pestanas",nombre:"Tarjeta Pestanas",premio:"Mantenimiento de pestanas gratis",visitas:8,color:"#7bafd4",svcs:["Pestanas","Extensiones"]}
+];
+const CATS_G=["Productos","Servicios","Equipos","Sueldos","Renta","Otros"];
+
+const hoy=()=>new Date().toISOString().split("T")[0];
+const fmt=(f)=>{if(!f)return"";const[y,m,d]=f.split("-");return d+"/"+m+"/"+y;};
+const mkLink=(c,a)=>window.location.href.split("?")[0]+"?cita="+c.id+"&accion="+a;
+const e=React.createElement;
+
+const getSvcs=()=>{try{const s=localStorage.getItem("mf_svcs");return s?JSON.parse(s):SVCS_DEF;}catch(ex){return SVCS_DEF;}};
+const saveSvcs=(s)=>localStorage.setItem("mf_svcs",JSON.stringify(s));
+const getTarjetas=()=>{try{const t=localStorage.getItem("mf_tarjetas");return t?JSON.parse(t):TARJETAS_DEF;}catch(ex){return TARJETAS_DEF;}};
+const saveTarjetas=(t)=>localStorage.setItem("mf_tarjetas",JSON.stringify(t));
+
+const waMsg=(c)=>{
+  const svcs=Array.isArray(c.servicios)?c.servicios.join(", "):c.servicio||"";
+  const msg="Hola "+c.cliente+" \uD83D\uDE0A\u2728\nTe recordamos tu cita en Miradas Fabulosas \uD83D\uDC85\n\n\uD83D\uDCC5 Fecha: "+fmt(c.fecha)+"\n\uD83D\uDD50 Hora: "+c.hora+"\n\u2702\uFE0F Servicios: "+svcs+"\n\uD83D\uDC69 Con: "+c.estilista+"\n\n\u00BFNos confirmas tu cita?\n\n\u2705 SI confirmo:\n"+mkLink(c,"confirmar")+"\n\n\u274C No puedo ir:\n"+mkLink(c,"cancelar")+"\n\n\u00A1Te esperamos! \uD83D\uDC95";
+  return"https://wa.me/"+c.telefono.replace(/\D/g,"")+"?text="+encodeURIComponent(msg);
+};
+
+const defForm=()=>({cliente:"",telefono:"",servicios:[],estilista:ESTS[0],fecha:hoy(),hora:"09:00",nota:"",precio:0,pago:"Efectivo"});
+
+// ── COMPONENTES BASE ────────────────────────────────────────────
+const Modal=({open,onClose,title,children})=>open?e("div",{style:{position:"fixed",inset:0,background:"rgba(0,0,0,0.5)",zIndex:999,display:"flex",alignItems:"center",justifyContent:"center",padding:16}},
+  e("div",{style:{background:"#fff",borderRadius:18,padding:24,width:"100%",maxWidth:420,maxHeight:"90vh",overflowY:"auto"}},
+    e("div",{style:{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:16}},
+      e("div",{style:{fontWeight:700,fontSize:16,color:"#333"}},title),
+      e("button",{onClick:onClose,style:{background:"none",border:"none",fontSize:22,cursor:"pointer",color:"#aaa"}},"x")
+    ),
+    children
+  )
+):null;
+
+// ── LOGIN ───────────────────────────────────────────────────────
+function Login({onLogin,users}){
+  const[sel,setSel]=useState(null);
+  const[pin,setPin]=useState("");
+  const[err,setErr]=useState("");
+  const press=(d)=>{
+    if(pin.length>=4)return;
+    const n=pin+d;setPin(n);setErr("");
+    if(n.length===4)setTimeout(()=>{
+      const u=users[sel];
+      if(u&&u.pin===n){onLogin(sel,u.rol);setPin("");}
+      else{setErr("PIN incorrecto");setPin("");}
+    },100);
+  };
+  return e("div",{style:{minHeight:"100vh",background:"linear-gradient(160deg,#f9e8e8,#fff0f5)",display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",padding:24}},
+    e("div",{style:{fontSize:52,marginBottom:8}},"💅"),
+    e("div",{style:{fontWeight:800,fontSize:22,color:"#c9878a",marginBottom:4}},"Miradas Fabulosas"),
+    e("div",{style:{fontSize:13,color:"#aaa",marginBottom:32}},"Sistema de gestion"),
+    !sel
+      ?e("div",{style:{width:"100%",maxWidth:340}},
+        e("div",{style:{fontWeight:700,fontSize:14,color:"#888",marginBottom:14,textAlign:"center"}},"Quien eres?"),
+        ...Object.keys(users).map(n=>e("button",{key:n,onClick:()=>{setSel(n);setPin("");setErr("");},style:{width:"100%",padding:"14px 20px",background:"#fff",border:"2px solid "+(COLORS[n]||"#e8c8c8"),borderRadius:14,marginBottom:10,fontSize:15,fontWeight:700,color:"#333",cursor:"pointer",display:"flex",alignItems:"center",gap:12}},
+          e("div",{style:{width:36,height:36,borderRadius:"50%",background:COLORS[n]||"#c9878a",display:"flex",alignItems:"center",justifyContent:"center",color:"#fff",fontSize:16,flexShrink:0}},n[0]),
+          e("div",{style:{textAlign:"left"}},e("div",null,n),e("div",{style:{fontSize:11,color:"#aaa",fontWeight:400}},users[n].rol==="admin"?"Administradora":"Estilista"))
+        ))
+      )
+      :e("div",{style:{width:"100%",maxWidth:300,textAlign:"center"}},
+        e("button",{onClick:()=>{setSel(null);setPin("");setErr("");},style:{background:"none",border:"none",color:"#aaa",fontSize:13,cursor:"pointer",marginBottom:16}},"Volver"),
+        e("div",{style:{width:48,height:48,borderRadius:"50%",background:COLORS[sel]||"#c9878a",margin:"0 auto 12px",display:"flex",alignItems:"center",justifyContent:"center",color:"#fff",fontSize:22,fontWeight:700}},sel[0]),
+        e("div",{style:{fontWeight:700,fontSize:16,color:"#333",marginBottom:4}},sel),
+        e("div",{style:{fontSize:13,color:"#aaa",marginBottom:24}},"Ingresa tu PIN"),
+        e("div",{style:{display:"flex",justifyContent:"center",gap:14,marginBottom:8}},...[0,1,2,3].map(i=>e("div",{key:i,style:{width:16,height:16,borderRadius:"50%",background:i<pin.length?"#c9878a":"#e8c8c8"}}))),
+        err&&e("div",{style:{color:"#c0392b",fontSize:13,marginBottom:8}},err),
+        e("div",{style:{height:16}}),
+        e("div",{style:{display:"grid",gridTemplateColumns:"repeat(3,1fr)",gap:12}},
+          ...[1,2,3,4,5,6,7,8,9,"",0,"<"].map((d,i)=>e("button",{key:i,onClick:()=>d==="<"?setPin(p=>p.slice(0,-1)):d!==""?press(String(d)):null,style:{padding:"18px 0",borderRadius:14,border:"none",background:d==="<"?"#f8d7da":d===""?"transparent":"#fff",color:d==="<"?"#c0392b":"#333",fontSize:20,fontWeight:700,cursor:d===""?"default":"pointer"}},d))
+        )
+      )
+  );
+}
+
+// ── AGENDA ─────────────────────────────────────────────────────
+function SecAgenda({citas,fid,user,isAdmin,showT,db}){
+  const[svcs,setSvcs]=useState(getSvcs);
+  const[tarjetas]=useState(getTarjetas);
+  const[vista,setVista]=useState("lista");
+  const[form,setForm]=useState(defForm());
+  const[editId,setEditId]=useState(null);
+  const[fFecha,setFFecha]=useState(hoy());
+  const[modalWA,setModalWA]=useState(null);
+
+  const toggleSvc=(nombre)=>{
+    setForm(f=>{
+      const lista=f.servicios||[];
+      const nuevo=lista.includes(nombre)?lista.filter(s=>s!==nombre):[...lista,nombre];
+      const precio=nuevo.reduce((s,n)=>{const sv=svcs.find(x=>x.nombre===n);return s+(sv?sv.precio:0);},0);
+      return{...f,servicios:nuevo,precio};
+    });
+  };
+
+  const guardarCita=async()=>{
+    if(!form.cliente||!form.telefono||!form.fecha||!form.hora||!(form.servicios||[]).length){
+      showT("Completa todos los campos y selecciona al menos un servicio","#c0392b");return;
+    }
+    const ff=isAdmin?form:{...form,estilista:user};
+    try{
+      if(editId){await updateDoc(doc(db,"citas",editId),ff);showT("Cita actualizada");}
+      else{const id=Date.now().toString();await setDoc(doc(db,"citas",id),{...ff,id,estado:"pendiente"});showT("Cita guardada","#c9878a");}
+      setForm(defForm());setEditId(null);setVista("lista");
+    }catch(ex){showT("Error al guardar","#c0392b");}
+  };
+
+  // Al completar cita — suma estrella en fidelidad automaticamente
+  const completarCita=async(c)=>{
+    try{
+      await updateDoc(doc(db,"citas",c.id),{estado:"completada"});
+      // Buscar si la clienta existe en fidelidad
+      const svcsClientа=Array.isArray(c.servicios)?c.servicios:[c.servicio||""];
+      const fidDoc=fid.find(f=>f.nombre===c.cliente);
+      const updates={};
+      tarjetas.forEach(t=>{
+        const aplica=svcsClientа.some(s=>t.svcs&&t.svcs.includes(s));
+        if(aplica){
+          const key="est_"+t.id;
+          const actual=(fidDoc&&fidDoc[key])||0;
+          updates[key]=actual+1;
+        }
+      });
+      if(Object.keys(updates).length>0){
+        if(fidDoc){
+          await updateDoc(doc(db,"fidelidad",fidDoc.id),updates);
+        }else{
+          const nid=Date.now().toString();
+          await setDoc(doc(db,"fidelidad",nid),{id:nid,nombre:c.cliente,telefono:c.telefono||"",...updates});
+        }
+        showT("Completada - Estrellas de fidelidad actualizadas","#c9878a");
+      }else{
+        showT("Cita completada","#27ae60");
+      }
+    }catch(ex){showT("Error","#c0392b");}
+  };
+
+  const cambEst=async(id,est)=>{
+    const cita=citas.find(c=>c.id===id);
+    if(est==="completada"&&cita){completarCita(cita);return;}
+    try{await updateDoc(doc(db,"citas",id),{estado:est});}catch(ex){}
+    const msgs={"confirmada":"Confirmada","cancelada":"Cancelada - espacio libre","pendiente":"Pendiente"};
+    const cols={"confirmada":"#27ae60","cancelada":"#c0392b","pendiente":"#888"};
+    showT(msgs[est]||est,cols[est]||"#888");
+  };
+
+  const editarCita=(c)=>{setForm({...c,pago:c.pago||"Efectivo"});setEditId(c.id);setVista("formulario");};
+
+  const estadoBg={"confirmada":"#e8f8f0","cancelada":"#fde8e8","completada":"#e8e8f8","pendiente":"#fff8e8"};
+  const estadoCol={"confirmada":"#27ae60","cancelada":"#c0392b","completada":"#5555aa","pendiente":"#856404"};
+
+  const citasMostrar=citas
+    .filter(c=>isAdmin||c.estilista===user)
+    .filter(c=>c.fecha===fFecha)
+    .sort((a,b)=>a.hora.localeCompare(b.hora));
+
+  return e("div",{style:{padding:16}},
+    e("div",{style:{display:"flex",gap:8,marginBottom:14}},
+      e("button",{onClick:()=>{setVista("lista");setEditId(null);setForm(defForm());},style:{flex:1,padding:10,borderRadius:10,border:"none",background:vista==="lista"?"#c9878a":"#f5efef",color:vista==="lista"?"#fff":"#888",fontWeight:700,fontSize:13,cursor:"pointer"}},"Ver Citas"),
+      e("button",{onClick:()=>setVista("formulario"),style:{flex:1,padding:10,borderRadius:10,border:"none",background:vista==="formulario"?"#c9878a":"#f5efef",color:vista==="formulario"?"#fff":"#888",fontWeight:700,fontSize:13,cursor:"pointer"}},editId?"Editando":"Nueva Cita")
+    ),
+
+    vista==="lista"&&e("div",{style:{marginBottom:14}},
+      e("div",{style:{fontSize:12,color:"#888",marginBottom:4}},"Fecha"),
+      e("input",{type:"date",value:fFecha,onChange:x=>setFFecha(x.target.value),style:{width:"100%",padding:10,borderRadius:10,border:"1px solid #ddd",fontSize:15,fontWeight:600,color:"#333"}})
+    ),
+
+    vista==="lista"&&e("div",{style:{background:"#fff0f3",borderRadius:12,padding:12,marginBottom:14,border:"1px solid #f0dede"}},
+      e("div",{style:{fontWeight:700,color:"#c9878a",fontSize:14,marginBottom:6}},"Citas del "+fmt(fFecha)+" ("+citasMostrar.length+")"),
+      citasMostrar.length===0
+        ?e("div",{style:{color:"#aaa",fontSize:13}},"No hay citas para esta fecha")
+        :citasMostrar.map(c=>e("div",{key:c.id,style:{fontSize:13,padding:"4px 0",borderBottom:"1px solid #f8e8ea",display:"flex",justifyContent:"space-between"}},
+            e("span",null,e("strong",null,c.hora+" "),"- "+c.cliente),
+            e("span",{style:{color:COLORS[c.estilista]||"#888",fontWeight:600,fontSize:12}},c.estilista)
+          ))
+    ),
+
+    vista==="formulario"&&e("div",{style:{display:"flex",flexDirection:"column",gap:10}},
+      editId&&e("div",{style:{background:"#fff3cd",padding:"8px 12px",borderRadius:8,fontSize:13,color:"#856404"}},"Editando cita de "+form.cliente),
+      e("input",{placeholder:"Nombre de la clienta",value:form.cliente,onChange:x=>setForm({...form,cliente:x.target.value}),style:{padding:12,borderRadius:10,border:"1px solid #ddd",fontSize:14}}),
+      e("input",{placeholder:"Telefono WhatsApp (502XXXXXXXX)",value:form.telefono,onChange:x=>setForm({...form,telefono:x.target.value}),style:{padding:12,borderRadius:10,border:"1px solid #ddd",fontSize:14}}),
+      e("input",{type:"date",value:form.fecha,onChange:x=>setForm({...form,fecha:x.target.value}),style:{padding:12,borderRadius:10,border:"1px solid #ddd",fontSize:14}}),
+      e("select",{value:form.hora,onChange:x=>setForm({...form,hora:x.target.value}),style:{padding:12,borderRadius:10,border:"1px solid #ddd",fontSize:14}},HORAS.map(h=>e("option",{key:h,value:h},h))),
+      isAdmin&&e("select",{value:form.estilista,onChange:x=>setForm({...form,estilista:x.target.value}),style:{padding:12,borderRadius:10,border:"1px solid #ddd",fontSize:14}},ESTS.map(s=>e("option",{key:s,value:s},s))),
+      !isAdmin&&e("div",{style:{padding:"10px 12px",borderRadius:10,background:"#f5efef",fontSize:13,color:"#888"}},"Estilista: "+user),
+      e("div",{style:{fontSize:13,fontWeight:700,color:"#666"}},"Servicios:"),
+      e("div",{style:{display:"flex",flexWrap:"wrap",gap:6}},
+        svcs.map(s=>e("button",{key:s.id,onClick:()=>toggleSvc(s.nombre),style:{padding:"8px 12px",borderRadius:8,border:"1px solid "+((form.servicios||[]).includes(s.nombre)?"#c9878a":"#ddd"),background:(form.servicios||[]).includes(s.nombre)?"#fff0f1":"#fff",color:(form.servicios||[]).includes(s.nombre)?"#c9878a":"#555",fontSize:12,fontWeight:600,cursor:"pointer"}},s.nombre+" Q"+s.precio))
+      ),
+      form.precio>0&&e("div",{style:{fontWeight:700,color:"#c9878a",fontSize:15,padding:"8px 0"}},"Total: Q"+form.precio),
+      e("div",{style:{fontSize:13,fontWeight:700,color:"#666"}},"Forma de pago:"),
+      e("div",{style:{display:"flex",gap:6,flexWrap:"wrap"}},
+        PAGOS.map(p=>e("button",{key:p,onClick:()=>setForm({...form,pago:p}),style:{padding:"8px 14px",borderRadius:8,border:"1px solid "+(form.pago===p?"#c9878a":"#ddd"),background:form.pago===p?"#fff0f1":"#fff",color:form.pago===p?"#c9878a":"#555",fontSize:12,fontWeight:600,cursor:"pointer"}},p))
+      ),
+      e("textarea",{placeholder:"Notas (alergias, preferencias...)",value:form.nota||"",onChange:x=>setForm({...form,nota:x.target.value}),rows:2,style:{padding:12,borderRadius:10,border:"1px solid #ddd",fontSize:13,resize:"vertical"}}),
+      e("div",{style:{display:"flex",gap:8}},
+        editId&&e("button",{onClick:()=>{setForm(defForm());setEditId(null);setVista("lista");},style:{flex:1,padding:14,borderRadius:10,border:"1px solid #ddd",background:"#fff",color:"#888",fontWeight:700,fontSize:14,cursor:"pointer"}},"Cancelar"),
+        e("button",{onClick:guardarCita,style:{flex:2,padding:14,borderRadius:10,border:"none",background:"#c9878a",color:"#fff",fontWeight:700,fontSize:15,cursor:"pointer"}},editId?"Actualizar Cita":"Guardar Cita")
+      )
+    ),
+
+    vista==="lista"&&e("div",null,
+      citasMostrar.map(c=>e("div",{key:c.id,style:{background:"#fff",padding:14,borderRadius:12,borderLeft:"5px solid "+(COLORS[c.estilista]||"#ddd"),marginBottom:10,border:"1px solid #f0dede"}},
+        e("div",{style:{display:"flex",justifyContent:"space-between",marginBottom:4}},
+          e("strong",{style:{fontSize:15,color:"#333"}},c.cliente),
+          e("span",{style:{fontSize:14,color:"#888",fontWeight:700}},c.hora)
+        ),
+        e("div",{style:{fontSize:12,color:COLORS[c.estilista]||"#888",fontWeight:700,marginBottom:2}},c.estilista),
+        e("div",{style:{fontSize:13,color:"#555",marginBottom:6}},Array.isArray(c.servicios)?c.servicios.join(", "):c.servicio||""),
+        e("div",{style:{display:"flex",gap:8,marginBottom:8,alignItems:"center",flexWrap:"wrap"}},
+          c.precio>0&&e("span",{style:{fontWeight:700,color:"#c9878a",fontSize:14}},"Q"+c.precio),
+          c.pago&&e("span",{style:{fontSize:11,background:"#f0f0f0",padding:"3px 8px",borderRadius:10,color:"#666"}},c.pago),
+          e("span",{style:{fontSize:11,background:estadoBg[c.estado]||"#f5f5f5",padding:"3px 8px",borderRadius:10,color:estadoCol[c.estado]||"#666",fontWeight:700}},c.estado||"pendiente")
+        ),
+        c.nota&&e("div",{style:{fontSize:12,color:"#888",marginBottom:8,fontStyle:"italic"}},"Nota: "+c.nota),
+        e("div",{style:{display:"flex",gap:6,flexWrap:"wrap"}},
+          c.estado!=="completada"&&e("button",{onClick:()=>cambEst(c.id,"confirmada"),style:{padding:"6px 10px",borderRadius:6,border:"none",background:"#e8f8f0",color:"#27ae60",fontSize:11,fontWeight:700,cursor:"pointer"}},"Confirmar"),
+          c.estado!=="completada"&&c.estado!=="cancelada"&&e("button",{onClick:()=>cambEst(c.id,"completada"),style:{padding:"6px 10px",borderRadius:6,border:"none",background:"#e8e8f8",color:"#5555aa",fontSize:11,fontWeight:700,cursor:"pointer"}},"Completada"),
+          c.estado!=="completada"&&e("button",{onClick:()=>cambEst(c.id,"cancelada"),style:{padding:"6px 10px",borderRadius:6,border:"none",background:"#fdedec",color:"#c0392b",fontSize:11,fontWeight:700,cursor:"pointer"}},"Cancelar"),
+          e("button",{onClick:()=>editarCita(c),style:{padding:"6px 10px",borderRadius:6,border:"none",background:"#f0f0f0",color:"#555",fontSize:11,fontWeight:700,cursor:"pointer"}},"Editar"),
+          e("button",{onClick:()=>setModalWA(c),style:{padding:"6px 10px",borderRadius:6,border:"none",background:"#eafaf1",color:"#27ae60",fontSize:11,fontWeight:700,cursor:"pointer"}},"WA")
+        )
+      ))
+    ),
+
+    modalWA&&e(Modal,{open:true,onClose:()=>setModalWA(null),title:"Enviar WhatsApp a "+modalWA.cliente},
+      e("div",{style:{display:"flex",flexDirection:"column",gap:10}},
+        e("a",{href:waMsg(modalWA),target:"_blank",onClick:()=>setModalWA(null),style:{display:"block",padding:"12px 16px",borderRadius:10,background:"#25D366",color:"#fff",fontWeight:700,fontSize:14,textDecoration:"none",textAlign:"center"}},"Enviar recordatorio de cita"),
+        e("button",{onClick:()=>setModalWA(null),style:{padding:"10px",borderRadius:10,border:"1px solid #ddd",background:"#fff",color:"#888",fontWeight:700,cursor:"pointer"}},"Cerrar")
+      )
+    )
+  );
+}
+
+// ── SERVICIOS ───────────────────────────────────────────────────
+function SecServicios({showT}){
+  const[svcs,setSvcs]=useState(getSvcs);
+  const[modal,setModal]=useState(false);
+  const[editId,setEditId]=useState(null);
+  const[form,setForm]=useState({nombre:"",precio:0});
+
+  const guardar=()=>{
+    if(!form.nombre)return;
+    let nuevo;
+    if(editId){nuevo=svcs.map(s=>s.id===editId?{...s,...form,precio:Number(form.precio)}:s);}
+    else{nuevo=[...svcs,{...form,id:"s"+Date.now(),precio:Number(form.precio)}];}
+    setSvcs(nuevo);saveSvcs(nuevo);setModal(false);showT("Servicio guardado","#c9878a");
+  };
+
+  const eliminar=(id)=>{
+    if(!window.confirm("Eliminar este servicio?"))return;
+    const nuevo=svcs.filter(s=>s.id!==id);setSvcs(nuevo);saveSvcs(nuevo);showT("Servicio eliminado");
+  };
+
+  return e("div",{style:{padding:16}},
+    e("div",{style:{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:14}},
+      e("div",{style:{fontWeight:700,fontSize:16,color:"#333"}},"Servicios y Precios"),
+      e("button",{onClick:()=>{setForm({nombre:"",precio:0});setEditId(null);setModal(true);},style:{padding:"8px 14px",borderRadius:10,border:"none",background:"#c9878a",color:"#fff",fontWeight:700,fontSize:13,cursor:"pointer"}},"+Nuevo")
+    ),
+    svcs.map(s=>e("div",{key:s.id,style:{background:"#fff",border:"1px solid #f0dede",borderRadius:10,padding:"12px 14px",marginBottom:8,display:"flex",justifyContent:"space-between",alignItems:"center"}},
+      e("div",null,
+        e("div",{style:{fontWeight:600,color:"#333",fontSize:14}},s.nombre),
+        e("div",{style:{fontWeight:700,color:"#c9878a",fontSize:15}},"Q"+s.precio)
+      ),
+      e("div",{style:{display:"flex",gap:6}},
+        e("button",{onClick:()=>{setForm({nombre:s.nombre,precio:s.precio});setEditId(s.id);setModal(true);},style:{padding:"6px 12px",borderRadius:8,border:"1px solid #c9878a",background:"#fff",color:"#c9878a",fontSize:12,fontWeight:700,cursor:"pointer"}},"Editar"),
+        e("button",{onClick:()=>eliminar(s.id),style:{padding:"6px 12px",borderRadius:8,border:"none",background:"#fdedec",color:"#c0392b",fontSize:12,fontWeight:700,cursor:"pointer"}},"Borrar")
+      )
+    )),
+    modal&&e(Modal,{open:true,onClose:()=>setModal(false),title:editId?"Editar servicio":"Nuevo servicio"},
+      e("div",{style:{marginBottom:10}},
+        e("div",{style:{fontSize:12,color:"#888",marginBottom:3}},"Nombre del servicio"),
+        e("input",{value:form.nombre,onChange:x=>setForm({...form,nombre:x.target.value}),placeholder:"Ej: Microblading",style:{width:"100%",padding:"10px 12px",borderRadius:10,border:"1px solid #ddd",fontSize:14}})
+      ),
+      e("div",{style:{marginBottom:14}},
+        e("div",{style:{fontSize:12,color:"#888",marginBottom:3}},"Precio (Q)"),
+        e("input",{type:"number",value:form.precio,onChange:x=>setForm({...form,precio:x.target.value}),style:{width:"100%",padding:"10px 12px",borderRadius:10,border:"1px solid #ddd",fontSize:14}})
+      ),
+      e("div",{style:{display:"flex",gap:8,justifyContent:"flex-end"}},
+        e("button",{onClick:()=>setModal(false),style:{padding:"10px 16px",borderRadius:10,border:"1px solid #ddd",background:"#fff",color:"#888",fontWeight:700,cursor:"pointer"}},"Cancelar"),
+        e("button",{onClick:guardar,style:{padding:"10px 20px",borderRadius:10,border:"none",background:"#c9878a",color:"#fff",fontWeight:700,cursor:"pointer"}},editId?"Guardar":"Crear")
+      )
+    )
+  );
+}
+
+// ── FIDELIDAD ───────────────────────────────────────────────────
+function SecFidelidad({fid,showT,db}){
+  const[tarjetas,setTarjetas]=useState(getTarjetas);
+  const[busq,setBusq]=useState("");
+  const[editTarjeta,setEditTarjeta]=useState(null);
+  const[modalT,setModalT]=useState(false);
+  const[formT,setFormT]=useState({});
+  const[modalPremio,setModalPremio]=useState(null);
+
+  const guardarTarjetas=(t)=>{setTarjetas(t);saveTarjetas(t);};
+
+  const sumarVisita=async(fidDoc,tarjeta)=>{
+    const key="est_"+tarjeta.id;
+    const actual=fidDoc[key]||0;
+    const nuevo=actual+1;
+    if(nuevo>=tarjeta.visitas){setModalPremio({fidDoc,tarjeta,key});}
+    else{
+      try{await updateDoc(doc(db,"fidelidad",fidDoc.id),{[key]:nuevo});showT("Estrella agregada ("+nuevo+"/"+tarjeta.visitas+")","#c9878a");}
+      catch(ex){showT("Error","#c0392b");}
+    }
+  };
+
+  const canjearPremio=async()=>{
+    if(!modalPremio)return;
+    const{fidDoc,tarjeta,key}=modalPremio;
+    try{await updateDoc(doc(db,"fidelidad",fidDoc.id),{[key]:0});showT("Premio canjeado - Estrellas reiniciadas!","#c9878a");setModalPremio(null);}
+    catch(ex){showT("Error","#c0392b");}
+  };
+
+  const fidFiltrado=fid.filter(f=>!busq||(f.nombre||"").toLowerCase().includes(busq.toLowerCase()));
+
+  return e("div",{style:{padding:16}},
+    e("div",{style:{marginBottom:16}},
+      e("div",{style:{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:10}},
+        e("div",{style:{fontWeight:700,fontSize:15,color:"#333"}},"Tarjetas de fidelidad"),
+        e("button",{onClick:()=>{setFormT({nombre:"",premio:"",visitas:8,color:"#c9878a",svcs:[]});setEditTarjeta(null);setModalT(true);},style:{padding:"6px 12px",borderRadius:8,border:"none",background:"#c9878a",color:"#fff",fontWeight:700,fontSize:12,cursor:"pointer"}},"+Nueva")
+      ),
+      e("div",{style:{display:"flex",gap:8,flexWrap:"wrap"}},
+        tarjetas.map(t=>e("div",{key:t.id,style:{background:"#fff",border:"2px solid "+t.color,borderRadius:12,padding:10,flex:1,minWidth:140}},
+          e("div",{style:{fontWeight:700,color:t.color,fontSize:13,marginBottom:2}},t.nombre),
+          e("div",{style:{fontSize:11,color:"#888",marginBottom:4}},"Premio: "+t.premio),
+          e("div",{style:{fontSize:11,color:"#aaa",marginBottom:6}},t.visitas+" visitas para ganar"),
+          e("button",{onClick:()=>{setFormT({...t});setEditTarjeta(t.id);setModalT(true);},style:{padding:"4px 10px",borderRadius:6,border:"1px solid "+t.color,background:"#fff",color:t.color,fontSize:11,fontWeight:700,cursor:"pointer"}},"Editar")
+        ))
+      )
+    ),
+
+    e("input",{placeholder:"Buscar clienta...",value:busq,onChange:x=>setBusq(x.target.value),style:{width:"100%",padding:10,borderRadius:10,border:"1px solid #ddd",fontSize:14,marginBottom:12}}),
+
+    fidFiltrado.length===0&&e("div",{style:{textAlign:"center",color:"#aaa",padding:30,fontSize:14}},"No hay clientas en fidelidad todavia"),
+
+    fidFiltrado.map(f=>e("div",{key:f.id,style:{background:"#fff",border:"1px solid #f0dede",borderRadius:12,padding:14,marginBottom:10}},
+      e("div",{style:{fontWeight:700,fontSize:15,color:"#333",marginBottom:10}},f.nombre),
+      tarjetas.map(t=>{
+        const est=f["est_"+t.id]||0;
+        const listo=est>=t.visitas;
+        return e("div",{key:t.id,style:{background:listo?t.color+"15":"#f9f9f9",border:"1.5px solid "+(listo?t.color:"#eee"),borderRadius:10,padding:10,marginBottom:8}},
+          e("div",{style:{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:6}},
+            e("div",{style:{fontWeight:700,color:t.color,fontSize:13}},t.nombre),
+            e("span",{style:{fontSize:12,color:"#888"}},est+"/"+t.visitas)
+          ),
+          e("div",{style:{display:"flex",flexWrap:"wrap",gap:2,marginBottom:8}},
+            Array.from({length:t.visitas}).map((_,i)=>e("span",{key:i,style:{fontSize:20,color:i<est?t.color:"#ddd"}},"★"))
+          ),
+          listo
+            ?e("div",null,
+                e("div",{style:{fontSize:12,fontWeight:700,color:t.color,marginBottom:6}},"Premio listo: "+t.premio),
+                e("button",{onClick:()=>setModalPremio({fidDoc:f,tarjeta:t,key:"est_"+t.id}),style:{padding:"6px 14px",borderRadius:8,border:"none",background:t.color,color:"#fff",fontWeight:700,fontSize:12,cursor:"pointer"}},"Canjear premio")
+              )
+            :e("button",{onClick:()=>sumarVisita(f,t),style:{padding:"6px 12px",borderRadius:8,border:"1px solid "+t.color,background:"#fff",color:t.color,fontWeight:700,fontSize:12,cursor:"pointer"}},"+Sumar visita")
+        );
+      })
+    )),
+
+    modalT&&e(Modal,{open:true,onClose:()=>setModalT(false),title:editTarjeta?"Editar tarjeta":"Nueva tarjeta"},
+      e("div",{style:{marginBottom:10}},
+        e("div",{style:{fontSize:12,color:"#888",marginBottom:3}},"Nombre"),
+        e("input",{value:formT.nombre||"",onChange:x=>setFormT({...formT,nombre:x.target.value}),placeholder:"Ej: Tarjeta Cejas",style:{width:"100%",padding:"10px 12px",borderRadius:10,border:"1px solid #ddd",fontSize:14}})
+      ),
+      e("div",{style:{marginBottom:10}},
+        e("div",{style:{fontSize:12,color:"#888",marginBottom:3}},"Premio al completar"),
+        e("input",{value:formT.premio||"",onChange:x=>setFormT({...formT,premio:x.target.value}),placeholder:"Ej: Depilacion gratis",style:{width:"100%",padding:"10px 12px",borderRadius:10,border:"1px solid #ddd",fontSize:14}})
+      ),
+      e("div",{style:{marginBottom:10}},
+        e("div",{style:{fontSize:12,color:"#888",marginBottom:3}},"Numero de visitas para ganar"),
+        e("input",{type:"number",value:formT.visitas||8,onChange:x=>setFormT({...formT,visitas:Number(x.target.value)}),style:{width:"100%",padding:"10px 12px",borderRadius:10,border:"1px solid #ddd",fontSize:14}})
+      ),
+      e("div",{style:{marginBottom:14}},
+        e("div",{style:{fontSize:12,color:"#888",marginBottom:4}},"Color"),
+        e("input",{type:"color",value:formT.color||"#c9878a",onChange:x=>setFormT({...formT,color:x.target.value}),style:{width:48,height:36,border:"none",borderRadius:8,cursor:"pointer"}})
+      ),
+      e("div",{style:{display:"flex",gap:8,justifyContent:"flex-end"}},
+        e("button",{onClick:()=>setModalT(false),style:{padding:"10px 16px",borderRadius:10,border:"1px solid #ddd",background:"#fff",color:"#888",fontWeight:700,cursor:"pointer"}},"Cancelar"),
+        e("button",{onClick:()=>{
+          if(!formT.nombre||!formT.premio)return;
+          if(editTarjeta){guardarTarjetas(tarjetas.map(t=>t.id===editTarjeta?{...formT}:t));}
+          else{guardarTarjetas([...tarjetas,{...formT,id:Date.now().toString()}]);}
+          setModalT(false);showT("Tarjeta guardada","#c9878a");
+        },style:{padding:"10px 20px",borderRadius:10,border:"none",background:"#c9878a",color:"#fff",fontWeight:700,cursor:"pointer"}},editTarjeta?"Guardar":"Crear")
+      )
+    ),
+
+    modalPremio&&e(Modal,{open:true,onClose:()=>setModalPremio(null),title:"Premio ganado"},
+      e("div",{style:{textAlign:"center",padding:"10px 0"}},
+        e("div",{style:{fontSize:52,marginBottom:12}},"🎉"),
+        e("div",{style:{fontWeight:800,fontSize:20,color:"#333",marginBottom:4}},modalPremio.fidDoc.nombre),
+        e("div",{style:{fontSize:14,color:"#888",marginBottom:16}},"Completo "+modalPremio.tarjeta.visitas+" visitas en "+modalPremio.tarjeta.nombre),
+        e("div",{style:{background:modalPremio.tarjeta.color+"15",border:"2px solid "+modalPremio.tarjeta.color,borderRadius:12,padding:16,marginBottom:20}},
+          e("div",{style:{fontSize:12,color:"#888",marginBottom:4}},"Premio:"),
+          e("div",{style:{fontWeight:800,fontSize:18,color:modalPremio.tarjeta.color}},modalPremio.tarjeta.premio)
+        ),
+        e("div",{style:{display:"flex",gap:8,justifyContent:"center"}},
+          e("button",{onClick:()=>setModalPremio(null),style:{padding:"10px 16px",borderRadius:10,border:"1px solid #ddd",background:"#fff",color:"#888",fontWeight:700,cursor:"pointer"}},"Cancelar"),
+          e("button",{onClick:canjearPremio,style:{padding:"10px 20px",borderRadius:10,border:"none",background:"#c9878a",color:"#fff",fontWeight:700,cursor:"pointer"}},"Confirmar y reiniciar")
+        )
+      )
+    )
+  );
+}
+
+// ── ADMIN ───────────────────────────────────────────────────────
+function SecAdmin({citas,gastos,fid,showT,db}){
+  const[tab,setTab]=useState("resumen");
+  const[mesFiltro,setMesFiltro]=useState(()=>new Date().toISOString().slice(0,7));
+  const[diaFiltro,setDiaFiltro]=useState("");
+  const[estFiltro,setEstFiltro]=useState("Todas");
+  const[modalGasto,setModalGasto]=useState(false);
+  const[formG,setFormG]=useState({descripcion:"",monto:0,fecha:hoy(),categoria:"Productos"});
+  const svcs=getSvcs();
+
+  const citasFiltradas=citas.filter(c=>{
+    if(c.estado==="cancelada")return false;
+    if(diaFiltro&&c.fecha!==diaFiltro)return false;
+    else if(!diaFiltro&&mesFiltro&&!(c.fecha||"").startsWith(mesFiltro))return false;
+    if(estFiltro!=="Todas"&&c.estilista!==estFiltro)return false;
+    return true;
+  }).sort((a,b)=>(a.fecha+a.hora).localeCompare(b.fecha+b.hora));
+
+  const ingresos=citasFiltradas.reduce((s,c)=>s+(c.precio||0),0);
+  const gastosFiltrados=gastos.filter(g=>diaFiltro?g.fecha===diaFiltro:(g.fecha||"").startsWith(mesFiltro));
+  const totalGastos=gastosFiltrados.reduce((s,g)=>s+(g.monto||0),0);
+
+  const porEst=ESTS.map(n=>{
+    const mis=citasFiltradas.filter(c=>c.estilista===n);
+    return{n,citas:mis.length,ingresos:mis.reduce((s,c)=>s+(c.precio||0),0)};
+  }).filter(x=>x.citas>0).sort((a,b)=>b.ingresos-a.ingresos);
+  const maxIng=Math.max(...porEst.map(x=>x.ingresos),1);
+  const top=porEst[0];
+
+  const porPago=PAGOS.reduce((acc,p)=>{acc[p]=citasFiltradas.filter(c=>c.pago===p).reduce((s,c)=>s+(c.precio||0),0);return acc;},{});
+
+  // Metricas de servicios
+  const svcMap={};
+  citasFiltradas.forEach(c=>{
+    (Array.isArray(c.servicios)?c.servicios:[c.servicio||""]).forEach(s=>{
+      if(!s)return;
+      if(!svcMap[s])svcMap[s]={nombre:s,cantidad:0,total:0};
+      svcMap[s].cantidad++;
+      const svcDef=svcs.find(x=>x.nombre===s);
+      svcMap[s].total+=(svcDef?svcDef.precio:0);
+    });
+  });
+  const svcRanking=Object.values(svcMap).sort((a,b)=>b.cantidad-a.cantidad);
+  const maxCant=Math.max(...svcRanking.map(x=>x.cantidad),1);
+
+  // CRM
+  const crmData=fid.map(f=>{
+    const misCitas=citas.filter(c=>c.cliente===f.nombre&&c.estado!=="cancelada");
+    const totalGastado=misCitas.reduce((s,c)=>s+(c.precio||0),0);
+    const svcMapa={};
+    misCitas.forEach(c=>{(Array.isArray(c.servicios)?c.servicios:[c.servicio||""]).forEach(s=>{if(s)svcMapa[s]=(svcMapa[s]||0)+1;});});
+    const svcFav=Object.entries(svcMapa).sort((a,b)=>b[1]-a[1])[0];
+    return{...f,totalCitas:misCitas.length,totalGastado,svcFav:svcFav?svcFav[0]:"",ultimaCita:misCitas.sort((a,b)=>b.fecha.localeCompare(a.fecha))[0]?.fecha||""};
+  }).sort((a,b)=>b.totalGastado-a.totalGastado);
+
+  const guardarGasto=async()=>{
+    if(!formG.descripcion||!formG.monto){showT("Completa los campos","#c0392b");return;}
+    try{
+      const id=Date.now().toString();
+      await setDoc(doc(db,"gastos",id),{...formG,id,monto:Number(formG.monto)});
+      showT("Gasto registrado","#c9878a");setModalGasto(false);
+      setFormG({descripcion:"",monto:0,fecha:hoy(),categoria:"Productos"});
+    }catch(ex){showT("Error al guardar","#c0392b");}
+  };
+
+  const eliminarGasto=async(id)=>{
+    if(!window.confirm("Eliminar este gasto?"))return;
+    try{await deleteDoc(doc(db,"gastos",id));showT("Gasto eliminado");}catch(ex){}
+  };
+
+  return e("div",{style:{padding:16}},
+    // Tabs
+    e("div",{style:{display:"flex",gap:6,marginBottom:14,overflowX:"auto",paddingBottom:4}},
+      ["resumen","detalle","estilistas","servicios","gastos","crm"].map(t=>e("button",{key:t,onClick:()=>setTab(t),style:{padding:"8px 14px",borderRadius:20,border:"none",background:tab===t?"#c9878a":"#f0f0f0",color:tab===t?"#fff":"#666",fontWeight:700,fontSize:12,cursor:"pointer",whiteSpace:"nowrap"}},
+        t==="resumen"?"Resumen":t==="detalle"?"Citas":t==="estilistas"?"Estilistas":t==="servicios"?"Servicios":t==="gastos"?"Gastos":"CRM"
+      ))
+    ),
+
+    // Filtros
+    e("div",{style:{background:"#f9f9f9",borderRadius:10,padding:10,marginBottom:14,display:"flex",gap:8,flexWrap:"wrap"}},
+      e("div",null,
+        e("div",{style:{fontSize:11,color:"#888",marginBottom:2}},"Mes"),
+        e("input",{type:"month",value:mesFiltro,onChange:x=>{setMesFiltro(x.target.value);setDiaFiltro("");},style:{padding:"6px 10px",border:"1px solid #ddd",borderRadius:8,fontSize:13}})
+      ),
+      e("div",null,
+        e("div",{style:{fontSize:11,color:"#888",marginBottom:2}},"Dia especifico"),
+        e("input",{type:"date",value:diaFiltro,onChange:x=>setDiaFiltro(x.target.value),style:{padding:"6px 10px",border:"1px solid #ddd",borderRadius:8,fontSize:13}})
+      ),
+      e("div",null,
+        e("div",{style:{fontSize:11,color:"#888",marginBottom:2}},"Estilista"),
+        e("select",{value:estFiltro,onChange:x=>setEstFiltro(x.target.value),style:{padding:"6px 10px",border:"1px solid #ddd",borderRadius:8,fontSize:13}},
+          e("option",{value:"Todas"},"Todas"),
+          ...ESTS.map(n=>e("option",{key:n,value:n},n))
+        )
+      ),
+      (diaFiltro||estFiltro!=="Todas")&&e("div",{style:{display:"flex",alignItems:"flex-end"}},
+        e("button",{onClick:()=>{setDiaFiltro("");setEstFiltro("Todas");},style:{padding:"6px 10px",borderRadius:8,border:"none",background:"#ddd",color:"#555",fontSize:12,fontWeight:700,cursor:"pointer"}},"Limpiar")
+      )
+    ),
+
+    // RESUMEN
+    tab==="resumen"&&e("div",null,
+      top&&e("div",{style:{background:"linear-gradient(135deg,#c9878a,#e8a0a3)",borderRadius:14,padding:16,marginBottom:14,color:"#fff",textAlign:"center"}},
+        e("div",{style:{fontSize:13,marginBottom:4}},"Top estilista del periodo"),
+        e("div",{style:{width:50,height:50,borderRadius:"50%",background:"rgba(255,255,255,0.3)",margin:"0 auto 8px",display:"flex",alignItems:"center",justifyContent:"center",fontSize:22,fontWeight:800}},top.n[0]),
+        e("div",{style:{fontWeight:800,fontSize:18,marginBottom:2}},"👑 "+top.n),
+        e("div",{style:{fontSize:14,opacity:0.9}},top.citas+" citas - Q"+top.ingresos.toLocaleString())
+      ),
+      e("div",{style:{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,marginBottom:14}},
+        e("div",{style:{background:"#fff",border:"1px solid #f0dede",borderRadius:12,padding:14,textAlign:"center"}},
+          e("div",{style:{fontSize:22,fontWeight:800,color:"#c9878a"}},"Q"+ingresos.toLocaleString()),
+          e("div",{style:{fontSize:11,color:"#888"}},"Ingresos")
+        ),
+        e("div",{style:{background:"#fff",border:"1px solid #f0dede",borderRadius:12,padding:14,textAlign:"center"}},
+          e("div",{style:{fontSize:22,fontWeight:800,color:"#e74c3c"}},"Q"+totalGastos.toLocaleString()),
+          e("div",{style:{fontSize:11,color:"#888"}},"Gastos")
+        ),
+        e("div",{style:{background:"#fff",border:"1px solid #f0dede",borderRadius:12,padding:14,textAlign:"center"}},
+          e("div",{style:{fontSize:22,fontWeight:800,color:"#27ae60"}},"Q"+(ingresos-totalGastos).toLocaleString()),
+          e("div",{style:{fontSize:11,color:"#888"}},"Ganancia neta")
+        ),
+        e("div",{style:{background:"#fff",border:"1px solid #f0dede",borderRadius:12,padding:14,textAlign:"center"}},
+          e("div",{style:{fontSize:22,fontWeight:800,color:"#7bafd4"}},citasFiltradas.length),
+          e("div",{style:{fontSize:11,color:"#888"}},"Citas")
+        )
+      ),
+      e("div",{style:{fontWeight:700,color:"#333",fontSize:14,marginBottom:8}},"Por forma de pago"),
+      e("div",{style:{display:"grid",gridTemplateColumns:"repeat(2,1fr)",gap:8}},
+        PAGOS.map(p=>e("div",{key:p,style:{background:"#fff",border:"1px solid #f0dede",borderRadius:10,padding:10,textAlign:"center"}},
+          e("div",{style:{fontWeight:700,color:"#c9878a",fontSize:16}},"Q"+(porPago[p]||0).toLocaleString()),
+          e("div",{style:{fontSize:11,color:"#888"}},p)
+        ))
+      )
+    ),
+
+    // DETALLE CITAS
+    tab==="detalle"&&e("div",null,
+      e("div",{style:{fontSize:13,color:"#888",marginBottom:10}},citasFiltradas.length+" citas encontradas"),
+      citasFiltradas.length===0&&e("div",{style:{textAlign:"center",color:"#aaa",padding:30}},"No hay citas con estos filtros"),
+      citasFiltradas.map(c=>e("div",{key:c.id,style:{background:"#fff",border:"1px solid #f0dede",borderLeft:"4px solid "+(COLORS[c.estilista]||"#ddd"),borderRadius:10,padding:12,marginBottom:8}},
+        e("div",{style:{display:"flex",justifyContent:"space-between",marginBottom:2}},
+          e("strong",{style:{fontSize:14}},c.cliente),
+          e("span",{style:{fontSize:12,color:"#888",fontWeight:700}},fmt(c.fecha)+" "+c.hora)
+        ),
+        e("div",{style:{fontSize:12,color:COLORS[c.estilista]||"#888",fontWeight:700,marginBottom:2}},c.estilista),
+        e("div",{style:{fontSize:13,color:"#555",marginBottom:6}},Array.isArray(c.servicios)?c.servicios.join(", "):c.servicio||""),
+        e("div",{style:{display:"flex",gap:8,flexWrap:"wrap",alignItems:"center"}},
+          c.precio>0&&e("span",{style:{fontWeight:700,color:"#c9878a"}},"Q"+c.precio),
+          c.pago&&e("span",{style:{fontSize:11,background:"#f0f0f0",padding:"2px 8px",borderRadius:10,color:"#666"}},c.pago),
+          e("span",{style:{fontSize:11,padding:"2px 8px",borderRadius:10,background:c.estado==="completada"?"#e8e8f8":c.estado==="confirmada"?"#e8f8f0":"#fff8e8",color:c.estado==="completada"?"#5555aa":c.estado==="confirmada"?"#27ae60":"#856404"}},c.estado||"pendiente")
+        )
+      ))
+    ),
+
+    // ESTILISTAS
+    tab==="estilistas"&&e("div",null,
+      porEst.length===0&&e("div",{style:{textAlign:"center",color:"#aaa",padding:30}},"No hay datos con estos filtros"),
+      porEst.map((x,i)=>e("div",{key:x.n,style:{background:"#fff",border:"1px solid #f0dede",borderRadius:12,padding:14,marginBottom:10}},
+        e("div",{style:{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:8}},
+          e("div",{style:{display:"flex",alignItems:"center",gap:10}},
+            e("div",{style:{width:36,height:36,borderRadius:"50%",background:COLORS[x.n]||"#c9878a",display:"flex",alignItems:"center",justifyContent:"center",color:"#fff",fontWeight:700,fontSize:16}},x.n[0]),
+            e("div",null,
+              e("div",{style:{fontWeight:700,fontSize:14,color:"#333"}},(i===0?"👑 ":i===1?"🥈 ":i===2?"🥉 ":"")+x.n),
+              e("div",{style:{fontSize:12,color:"#888"}},x.citas+" citas atendidas")
+            )
+          ),
+          e("div",{style:{fontWeight:800,color:"#c9878a",fontSize:18}},"Q"+x.ingresos.toLocaleString())
+        ),
+        e("div",{className:"bar"},e("div",{className:"bar-fill",style:{width:(x.ingresos/maxIng*100)+"%",background:COLORS[x.n]||"#c9878a"}}))
+      ))
+    ),
+
+    // SERVICIOS - METRICAS
+    tab==="servicios"&&e("div",null,
+      e("div",{style:{fontSize:13,color:"#888",marginBottom:12}},"Ranking de servicios por cantidad atendida"),
+      svcRanking.length===0&&e("div",{style:{textAlign:"center",color:"#aaa",padding:30}},"No hay datos con estos filtros"),
+      svcRanking.map((s,i)=>e("div",{key:s.nombre,style:{background:"#fff",border:"1px solid #f0dede",borderRadius:10,padding:12,marginBottom:8}},
+        e("div",{style:{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:6}},
+          e("div",{style:{display:"flex",alignItems:"center",gap:8}},
+            e("div",{style:{width:28,height:28,borderRadius:"50%",background:i===0?"#c9878a":i===1?"#aaa":i===2?"#cd7f32":"#f0dede",display:"flex",alignItems:"center",justifyContent:"center",color:i<3?"#fff":"#888",fontWeight:800,fontSize:13}},i+1),
+            e("div",{style:{fontWeight:700,color:"#333",fontSize:14}},s.nombre)
+          ),
+          e("div",{style:{textAlign:"right"}},
+            e("div",{style:{fontWeight:800,color:"#c9878a",fontSize:15}},"Q"+s.total.toLocaleString()),
+            e("div",{style:{fontSize:12,color:"#888"}},s.cantidad+" veces")
+          )
+        ),
+        e("div",{className:"bar"},e("div",{className:"bar-fill",style:{width:(s.cantidad/maxCant*100)+"%",background:"#c9878a"}}))
+      )),
+      svcRanking.length>0&&e("div",{style:{background:"#fff0f3",borderRadius:12,padding:14,marginTop:14,border:"1px solid #f0dede"}},
+        e("div",{style:{fontWeight:700,color:"#c9878a",marginBottom:8}},"Resumen total"),
+        e("div",{style:{fontSize:13,color:"#555",marginBottom:4}},"Total servicios realizados: "+svcRanking.reduce((s,x)=>s+x.cantidad,0)),
+        e("div",{style:{fontSize:13,color:"#555"}},`Servicio mas popular: ${svcRanking[0]?svcRanking[0].nombre:"-"}`),
+        svcRanking.length>1&&e("div",{style:{fontSize:13,color:"#aaa",marginTop:4}},"Servicio menos solicitado: "+svcRanking[svcRanking.length-1].nombre)
+      )
+    ),
+
+    // GASTOS
+    tab==="gastos"&&e("div",null,
+      e("div",{style:{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:14}},
+        e("div",{style:{fontWeight:700,fontSize:15,color:"#333"}},"Total: Q"+totalGastos.toLocaleString()),
+        e("button",{onClick:()=>setModalGasto(true),style:{padding:"8px 14px",borderRadius:10,border:"none",background:"#c9878a",color:"#fff",fontWeight:700,fontSize:13,cursor:"pointer"}},"+Agregar gasto")
+      ),
+      gastosFiltrados.length===0&&e("div",{style:{textAlign:"center",color:"#aaa",padding:30}},"No hay gastos registrados"),
+      gastosFiltrados.sort((a,b)=>(b.fecha||"").localeCompare(a.fecha||"")).map(g=>e("div",{key:g.id,style:{background:"#fff",border:"1px solid #f0dede",borderRadius:10,padding:12,marginBottom:8,display:"flex",justifyContent:"space-between",alignItems:"center"}},
+        e("div",null,
+          e("div",{style:{fontWeight:600,color:"#333",fontSize:14}},g.descripcion),
+          e("div",{style:{fontSize:12,color:"#888"}},fmt(g.fecha)+" - "+g.categoria)
+        ),
+        e("div",{style:{display:"flex",alignItems:"center",gap:8}},
+          e("div",{style:{fontWeight:700,color:"#e74c3c",fontSize:15}},"Q"+g.monto),
+          e("button",{onClick:()=>eliminarGasto(g.id),style:{padding:"4px 8px",borderRadius:6,border:"none",background:"#fdedec",color:"#c0392b",fontSize:11,fontWeight:700,cursor:"pointer"}},"x")
+        )
+      )),
+      modalGasto&&e(Modal,{open:true,onClose:()=>setModalGasto(false),title:"Registrar gasto"},
+        e("div",{style:{marginBottom:10}},
+          e("div",{style:{fontSize:12,color:"#888",marginBottom:3}},"Descripcion"),
+          e("input",{value:formG.descripcion,onChange:x=>setFormG({...formG,descripcion:x.target.value}),placeholder:"Ej: Tinte Loreal",style:{width:"100%",padding:"10px 12px",borderRadius:10,border:"1px solid #ddd",fontSize:14}})
+        ),
+        e("div",{style:{marginBottom:10}},
+          e("div",{style:{fontSize:12,color:"#888",marginBottom:3}},"Monto (Q)"),
+          e("input",{type:"number",value:formG.monto,onChange:x=>setFormG({...formG,monto:x.target.value}),style:{width:"100%",padding:"10px 12px",borderRadius:10,border:"1px solid #ddd",fontSize:14}})
+        ),
+        e("div",{style:{marginBottom:10}},
+          e("div",{style:{fontSize:12,color:"#888",marginBottom:3}},"Fecha"),
+          e("input",{type:"date",value:formG.fecha,onChange:x=>setFormG({...formG,fecha:x.target.value}),style:{width:"100%",padding:"10px 12px",borderRadius:10,border:"1px solid #ddd",fontSize:14}})
+        ),
+        e("div",{style:{marginBottom:14}},
+          e("div",{style:{fontSize:12,color:"#888",marginBottom:3}},"Categoria"),
+          e("select",{value:formG.categoria,onChange:x=>setFormG({...formG,categoria:x.target.value}),style:{width:"100%",padding:"10px 12px",borderRadius:10,border:"1px solid #ddd",fontSize:14}},
+            CATS_G.map(c=>e("option",{key:c,value:c},c))
+          )
+        ),
+        e("div",{style:{display:"flex",gap:8,justifyContent:"flex-end"}},
+          e("button",{onClick:()=>setModalGasto(false),style:{padding:"10px 16px",borderRadius:10,border:"1px solid #ddd",background:"#fff",color:"#888",fontWeight:700,cursor:"pointer"}},"Cancelar"),
+          e("button",{onClick:guardarGasto,style:{padding:"10px 20px",borderRadius:10,border:"none",background:"#c9878a",color:"#fff",fontWeight:700,cursor:"pointer"}},"Guardar")
+        )
+      )
+    ),
+
+    // CRM
+    tab==="crm"&&e("div",null,
+      e("div",{style:{fontSize:13,color:"#888",marginBottom:12}},"Historial por clienta — ordenado por mayor gasto"),
+      crmData.length===0&&e("div",{style:{textAlign:"center",color:"#aaa",padding:30}},"No hay clientas en el sistema todavia"),
+      crmData.map(f=>e("div",{key:f.id,style:{background:"#fff",border:"1px solid #f0dede",borderRadius:12,padding:14,marginBottom:10}},
+        e("div",{style:{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:8}},
+          e("div",null,
+            e("div",{style:{fontWeight:700,fontSize:15,color:"#333"}},f.nombre),
+            f.telefono&&e("div",{style:{fontSize:12,color:"#aaa"}},f.telefono)
+          ),
+          e("div",{style:{textAlign:"right"}},
+            e("div",{style:{fontWeight:800,color:"#c9878a",fontSize:16}},"Q"+f.totalGastado.toLocaleString()),
+            e("div",{style:{fontSize:11,color:"#888"}},"total gastado")
+          )
+        ),
+        e("div",{style:{display:"flex",gap:6,flexWrap:"wrap"}},
+          e("span",{style:{fontSize:12,background:"#f0f0f0",padding:"4px 10px",borderRadius:10,color:"#555"}},f.totalCitas+" visitas"),
+          f.svcFav&&e("span",{style:{fontSize:12,background:"#fff0f3",padding:"4px 10px",borderRadius:10,color:"#c9878a",fontWeight:600}},"Favorito: "+f.svcFav),
+          f.ultimaCita&&e("span",{style:{fontSize:12,background:"#f0f8f0",padding:"4px 10px",borderRadius:10,color:"#27ae60"}},"Ultima: "+fmt(f.ultimaCita))
+        )
+      ))
+    )
+  );
+}
+
+// ── APP ─────────────────────────────────────────────────────────
+function App(){
+  const[user,setUser]=useState(null);
+  const[rol,setRol]=useState(null);
+  const[users,setUsers]=useState(USERS_DEF);
+  const[citas,setCitas]=useState([]);
+  const[fid,setFid]=useState([]);
+  const[gastos,setGastos]=useState([]);
+  const[loading,setLoading]=useState(true);
+  const[sec,setSec]=useState("agenda");
+  const[toast,setToast]=useState(null);
+  const[confPantalla,setConfPantalla]=useState(null);
+  const isAdmin=rol==="admin";
+
+  useEffect(()=>{
+    const u1=onSnapshot(collection(db,"citas"),s=>{setCitas(s.docs.map(d=>({...d.data(),id:d.id})));setLoading(false);});
+    const u2=onSnapshot(collection(db,"fidelidad"),s=>{setFid(s.docs.map(d=>({...d.data(),id:d.id})));});
+    const u3=onSnapshot(collection(db,"gastos"),s=>{setGastos(s.docs.map(d=>({...d.data(),id:d.id})));});
+    const u4=onSnapshot(doc(db,"config","usuarios"),s=>{if(s.exists())setUsers(s.data());});
+    return()=>{u1();u2();u3();u4();};
+  },[]);
+
+  useEffect(()=>{
+    const p=new URLSearchParams(window.location.search);
+    const id=p.get("cita"),ac=p.get("accion");
+    if(id&&ac){localStorage.setItem("mf_pa",JSON.stringify({id,ac}));window.history.replaceState({},"",window.location.pathname);}
+  },[]);
+
+  useEffect(()=>{
+    if(!citas.length||loading)return;
+    try{
+      const pa=localStorage.getItem("mf_pa");
+      if(pa){
+        const{id,ac}=JSON.parse(pa);
+        const c=citas.find(x=>x.id===id);
+        if(c){const est=ac==="confirmar"?"confirmada":"cancelada";setConfPantalla({cita:c,est});updateDoc(doc(db,"citas",id),{estado:est});}
+        localStorage.removeItem("mf_pa");
+      }
+    }catch(ex){}
+  },[citas.length,loading]);
+
+  const showT=(msg,col="#222")=>{setToast({msg,col});setTimeout(()=>setToast(null),3000);};
+
+  if(!user)return e(Login,{users,onLogin:(u,r)=>{setUser(u);setRol(r);}});
+
+  if(confPantalla)return e("div",{style:{minHeight:"100vh",background:"#fff",display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",padding:20,textAlign:"center"}},
+    e("div",{style:{fontSize:64,marginBottom:16}},confPantalla.est==="confirmada"?"✅":"❌"),
+    e("div",{style:{fontSize:22,fontWeight:800,color:"#333",marginBottom:8}},confPantalla.est==="confirmada"?"Cita Confirmada!":"Cita Cancelada"),
+    e("div",{style:{fontSize:15,color:"#666",maxWidth:300}},"Gracias "+confPantalla.cita.cliente+". Tu respuesta ha sido registrada en Miradas Fabulosas.")
+  );
+
+  return e("div",{style:{paddingBottom:70,maxWidth:480,margin:"0 auto",background:"#fff",minHeight:"100vh"}},
+    e("div",{style:{padding:"16px 20px",background:"#fff",borderBottom:"1px solid #f0dede",display:"flex",justifyContent:"space-between",alignItems:"center",position:"sticky",top:0,zIndex:100}},
+      e("div",null,
+        e("div",{style:{fontWeight:800,fontSize:18,color:"#c9878a"}},"Miradas Fabulosas"),
+        e("div",{style:{fontSize:12,color:"#aaa"}},"Hola, "+user)
+      ),
+      e("button",{onClick:()=>{setUser(null);setRol(null);setSec("agenda");},style:{background:"#fff0f0",border:"none",padding:"6px 12px",borderRadius:8,color:"#c0392b",fontSize:11,fontWeight:700,cursor:"pointer"}},"Salir")
+    ),
+
+    sec==="agenda"&&e(SecAgenda,{citas,fid,user,isAdmin,showT,db}),
+    sec==="servicios"&&e(SecServicios,{showT}),
+    sec==="fidelidad"&&e(SecFidelidad,{fid,showT,db}),
+    sec==="admin"&&isAdmin&&e(SecAdmin,{citas,gastos,fid,showT,db}),
+
+    e("div",{className:"nav"},
+      e("button",{className:sec==="agenda"?"active":"",onClick:()=>setSec("agenda")},e("span",{className:"ic"},"📅"),"Agenda"),
+      e("button",{className:sec==="servicios"?"active":"",onClick:()=>setSec("servicios")},e("span",{className:"ic"},"💅"),"Servicios"),
+      e("button",{className:sec==="fidelidad"?"active":"",onClick:()=>setSec("fidelidad")},e("span",{className:"ic"},"⭐"),"Fidelidad"),
+      isAdmin&&e("button",{className:sec==="admin"?"active":"",onClick:()=>setSec("admin")},e("span",{className:"ic"},"⚙️"),"Admin")
+    ),
+
+    toast&&e("div",{style:{position:"fixed",top:20,left:"50%",transform:"translateX(-50%)",background:toast.col,color:"#fff",padding:"10px 20px",borderRadius:20,fontSize:13,fontWeight:700,zIndex:300,boxShadow:"0 4px 20px rgba(0,0,0,0.15)"}},toast.msg)
+  );
+}
+
+const root=createRoot(document.getElementById("root"));
+root.render(React.createElement(App));
+</script>
+</body>
+</html>
